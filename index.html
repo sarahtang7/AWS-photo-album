@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <title>Photo Album Search</title>
+    <link rel="stylesheet" type="text/css" href="./style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+    <script type="text/javascript" src="lib/axios/dist/axios.standalone.js"></script>
+    <script type="text/javascript" src="lib/CryptoJS/rollups/hmac-sha256.js"></script>
+    <script type="text/javascript" src="lib/CryptoJS/rollups/sha256.js"></script>
+    <script type="text/javascript" src="lib/CryptoJS/components/hmac.js"></script>
+    <script type="text/javascript" src="lib/CryptoJS/components/enc-base64.js"></script>
+    <script type="text/javascript" src="lib/url-template/url-template.js"></script>
+    <script type="text/javascript" src="lib/apiGatewayCore/sigV4Client.js"></script>
+    <script type="text/javascript" src="lib/apiGatewayCore/apiGatewayClient.js"></script>
+    <script type="text/javascript" src="lib/apiGatewayCore/simpleHttpClient.js"></script>
+    <script type="text/javascript" src="lib/apiGatewayCore/utils.js"></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.919.0.min.js"></script>
+    <script src="./apigClient.js"></script>
+    <script type="text/javascript" src="script.js"></script>
+
+    <style>
+        #search-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 50px;
+            margin-bottom: 50px;
+        }
+
+        #photos-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .upload-area {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: lightsteelblue; 
+            height: 100px;
+        }
+
+        #text-results {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <!--Search Bar-->
+    <div id="search-container">
+        <form action="", method="get", id="search-bar">
+          <input type="text" placeholder="Search for Image" name="search" id="search" style="width: 600px;">
+        </form>
+        <button id="mic" style="margin-right: 3px; margin-left: 3px;" onclick="processVoiceInput()"><i class="fa fa-microphone"></i></button>
+
+        <button type="button" id="submit-search" onclick="showResults()">Search</button>
+    </div>
+
+    <!--Display Results-->
+    <div id="photos-container">
+        <br><br>
+    </div>
+    <div id="text-results"></div>
+
+    <!--Upload Photos Area-->
+    <div id="upload-container">
+        <h3>Upload Photos Here:</h3>
+        <div class="upload-area">
+            <form action="/action_page.php">
+                <input type="file" id="filetoupload" name="filename">
+                <label for="file-custom-labels">Custom Label(s): </label>
+                <input type="text" id="file-custom-labels" name="customlabels" placeholder="eg: 'dog, puppy'">
+            </form>
+            <button id="upload-file-button" style="margin-left: 50px;" onclick="uploadImage()">Upload</button>
+        </div>
+    </div>
+
+</body>
+
+</html>

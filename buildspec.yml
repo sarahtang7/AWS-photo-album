@@ -1,0 +1,4 @@
+version: 0.2
+tasks:
+  - name: Echo Installation Message
+    command: echo "Installing packages for client"
