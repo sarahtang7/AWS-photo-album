@@ -1,0 +1,632 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  S3Frontend:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      #AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+    DeletionPolicy: Retain
+
+  cfBucket2:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: cf-photos-bucket-2
+      #AccessControl: PublicRead
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - BucketKeyEnabled: true
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:Put
+            Function: !GetAtt cfindexphotos.Arn
+      CorsConfiguration: 
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+            AllowedOrigins:
+              - '*'
+            # ExposedHeaders:
+            #   - Date
+      # LoggingConfiguration: 
+      #   LoggingConfiguration
+      OwnershipControls: 
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration: 
+          BlockPublicAcls: False
+          BlockPublicPolicy: False
+          IgnorePublicAcls: False
+          RestrictPublicBuckets: False
+      #GET TAGS WORKING
+      # Tags: 
+      #   - Key: photo-upload-bucketkey
+      #   - Value: '-'
+    DependsOn: cfInvokeIndexPhotosLambdaPermission
+
+  cfInvokeIndexPhotosLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref cfindexphotos
+      #FunctionUrlAuthType: AWS_IAM
+      Principal: s3.amazonaws.com
+      SourceArn: arn:aws:s3:::cf-photos-bucket-2 #hard coded
+
+  cfInvokeSearchPhotosLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref cfsearchphotos
+      #FunctionUrlAuthType: AWS_IAM
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub
+          - arn:aws:execute-api:us-east-1:886187652459:${myapikey}/*/*/search
+          - myapikey: !Ref cfApiGateway
+      
+      #arn:partition:execute-api:region:account-id:api-id/stage/http-method/resource-path
+
+
+  cfBucket1Policy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      PolicyDocument:
+        Id: BucketPolicy1
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Join 
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref S3Frontend
+                - /*
+      Bucket: !Ref S3Frontend
+
+  cfBucket2Policy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      PolicyDocument:
+        Id: BucketPolicy2
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Join 
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref cfBucket2
+                - /*
+      Bucket: !Ref cfBucket2
+
+  cfLambdasRole:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      RoleName: cf-LambdasRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: 'IAM Role for index-photos and search-photos'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator'
+        - 'arn:aws:iam::aws:policy/AmazonLexFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonOpenSearchServiceFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonRekognitionFullAccess'
+      Policies:
+        - PolicyName: 'cf-LambdaLexV2Policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            #Path: /service-role/
+            Statement:
+            - Sid: VisualEditor0
+              Effect: Allow
+              Action:
+                - lex:CreateUploadUrl
+                - lex:ListBuiltInSlotTypes
+                - lex:ListBots
+                - lex:ListBuiltInIntents
+                - lex:ListImports
+                - lex:ListExports
+              Resource: "*"
+            - Sid: VisualEditor1
+              Effect: Allow
+              Action: lex:*
+              Resource:
+                - arn:aws:lex:us-east-1:886187652459:bot-alias/UGOVFNGXZV/VJGQILWXLN
+                - arn:aws:lex:us-east-1:886187652459:bot/UGOVFNGXZV
+        - PolicyName: 'cf-LambdasBasicExecution'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action: logs:CreateLogGroup
+              Resource: arn:aws:logs:us-east-1:886187652459:*
+            - Effect: Allow
+              Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource:
+              - arn:aws:logs:us-east-1:886187652459:log-group:/aws/lambda/cf-index-photos:*
+            - Effect: Allow
+              Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource:
+              - arn:aws:logs:us-east-1:886187652459:log-group:/aws/lambda/cf-search-photos:*
+        - PolicyName: cf-Access-OpenSearch
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action: es:ESHttp*
+              Resource: arn:aws:es:us-east-1:886187652459:domain/cf-photos/*
+            - Effect: Allow
+              Action:
+              - es:DescribeElasticsearchDomain
+              - es:DescribeElasticsearchDomains
+              - es:DescribeElasticsearchDomainConfig
+              - es:ESHttpPost
+              - es:ESHttpGet
+              - es:ESHttpPut
+              - es:ESHttp*
+              Resource:
+              - arn:aws:es:us-east-1:886187652459:domain/cf-photos
+              - arn:aws:es:us-east-1:886187652459:domain/cf-photos/*
+
+
+      
+
+
+  #FIGURE OUT OPENSEARCH PERMISSIONS FOR LAMBDAS
+
+  cfindexphotos:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Architectures: 
+        - 'x86_64'
+      Code: 
+        S3Bucket: 'cf-lambdafunctions'
+        S3Key: 'index-photos.zip'
+      Description: 'index photos lf'
+      Environment: 
+        Variables:
+          Region: 'us-east-1'
+      FunctionName: 'cf-index-photos'
+      Handler: 'lambda_function.lambda_handler'
+      Role: !GetAtt cfLambdasRole.Arn
+      # Events:
+      #   S3Trigger:
+      #     Type: S3
+      #     Properties:
+      #       Bucket:
+      #         Ref: cfBucket2
+      #       Events: s3:ObjectCreated:Put
+      Runtime: 'python3.9'
+      Timeout: 100
+      TracingConfig: 
+        Mode: Active
+
+  cfsearchphotos:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Architectures: 
+        - 'x86_64'
+      Code: 
+        S3Bucket: 'cf-lambdafunctions'
+        S3Key: 'search-photos.zip'
+      Description: 'search photos lf'
+      Environment: 
+        Variables:
+          Region: 'us-east-1'
+      FunctionName: 'cf-search-photos'
+      Handler: 'lambda_function.lambda_handler'
+      Role: !GetAtt cfLambdasRole.Arn
+      Runtime: 'python3.9'
+      Timeout: 100
+      TracingConfig: 
+        Mode: Active
+
+  cfphotos:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      DomainName: 'cf-photos'
+      EngineVersion: 'OpenSearch_2.5'
+      ClusterConfig:
+        InstanceCount: '1'
+        InstanceType: 't3.small.search'
+      EBSOptions:
+        EBSEnabled: true
+        #Iops: '0'
+        VolumeSize: '99'
+        VolumeType: 'gp3'
+      AccessPolicies:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: 'Allow'
+            Principal:
+              AWS: '*'
+            Action: 'es:*'
+            Resource: 'arn:aws:es:us-east-1:886187652459:domain/cf-photos/*'
+      AdvancedSecurityOptions:
+        Enabled: True
+        MasterUserOptions: 
+          # MasterUserName: 'master'
+          # MasterUserPassword: 'SarahEmilie1!'
+          MasterUserARN: 'arn:aws:iam::886187652459:role/cf-LambdasRole'
+        InternalUserDatabaseEnabled: False
+        # SAMLOptions: 
+        #     Enabled: True
+        #     # Idp: 
+        #     #   Idp
+        #     MasterBackendRole: !Ref cfLambdasRole
+        #     MasterUserName: master
+        #     RolesKey: all_access
+        #     # SessionTimeoutMinutes: Integer
+        #     # SubjectKey: String
+
+      EncryptionAtRestOptions: 
+        Enabled: True
+        KmsKeyId: '70ced678-98d4-4998-a148-4e5b12110788'
+      NodeToNodeEncryptionOptions: 
+        Enabled: True
+      # DomainEndpointOptions:
+      #   EnforceHTTPS: True
+
+  cfApiS3Role:
+    Type: 'AWS::IAM::Role'
+    Properties: 
+      RoleName: cf-Api-S3-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - apigateway.amazonaws.com
+              - lambda.amazonaws.com
+              - s3.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: 'IAM Role for apigateway and s3'
+      ManagedPolicyArns: 
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess'
+        - 'arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs'
+      Policies:
+        - PolicyName: 'cf-Upload-Image-Policy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: VisualEditor0
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:s3:::'
+                    - !Ref cfBucket2
+                    - /*
+                
+  cfApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Description: 'REST API configuration'
+      #Role: !GetAtt cfApiS3Role.Arn
+      Body:
+        swagger: '2.0'
+        info:
+          title: AI Photo Search
+          description: 'AI Photo Search application, built during the Cloud and Big Data course at Columbia University.'
+          version: 1.0.0
+        schemes:
+          - https
+        basePath: /v1
+        produces:
+          - application/json
+        paths: {}
+        definitions:
+          SearchResponse:
+            type: object
+            properties:
+              results:
+                type: array
+                items:
+                  $ref: '#/definitions/Photo'
+          Photo:
+            type: object
+            properties:
+              url:
+                type: string
+              labels:
+                type: array
+                items:
+                  type: string
+          Error:
+            type: object
+            properties:
+              code:
+                type: integer
+                format: int32
+              message:
+                type: string
+
+
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      Name: cf-ApiGateway
+
+  getSearchResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId:
+        Ref: cfApiGateway
+      ParentId:
+        Fn::GetAtt:
+          - cfApiGateway
+          - RootResourceId
+      PathPart: search
+  
+  getUploadResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId:
+        Ref: cfApiGateway
+      ParentId:
+        Fn::GetAtt:
+          - cfApiGateway
+          - RootResourceId
+      PathPart: upload
+
+  getBucketId:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId:
+        Ref: cfApiGateway
+      ParentId:
+        Ref: getUploadResource
+      PathPart: '{bucket}'
+
+  getFilename:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId:
+        Ref: cfApiGateway
+      ParentId:
+        Ref: getBucketId
+      PathPart: '{filename}'
+
+  apiGatewayGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: 'GET'
+      ApiKeyRequired: True
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: 'POST'
+        Uri: !Sub
+          - arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+          - lambdaArn: !GetAtt cfsearchphotos.Arn
+        IntegrationResponses:
+          - ResponseTemplates:
+              "application/json": "{ \"statusCode\": '200' }"
+            StatusCode: '200'
+      ResourceId: !Ref getSearchResource
+      RestApiId: !Ref cfApiGateway
+      RequestParameters:
+        method.request.querystring.q: false
+        method.request.header.x-api-key: true
+      RequestModels:
+        "application/json": "SearchResponse"
+      OperationName: 'searchPhotos'
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+        - StatusCode: '403'
+          ResponseModels:
+            application/json: Error
+        - StatusCode: '500'
+          ResponseModels:
+            application/json: Error
+    DependsOn:
+      - cfInvokeSearchPhotosLambdaPermission
+
+
+  cfSearchOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ResourceId: !Ref getSearchResource
+      RestApiId: !Ref cfApiGateway
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ApiKeyRequired: false
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters: 
+              method.response.header.Access-Control-Allow-Headers : "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+  
+  cfUploadOptionsMethod1:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ResourceId: !Ref getUploadResource
+      RestApiId: !Ref cfApiGateway
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ApiKeyRequired: false
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters: 
+              method.response.header.Access-Control-Allow-Headers : "'*'" 
+              method.response.header.Access-Control-Allow-Methods: "'PUT,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+  
+
+  cfUploadOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ResourceId: !Ref getFilename
+      RestApiId: !Ref cfApiGateway
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ApiKeyRequired: false
+      RequestParameters:
+        method.request.path.bucket: true
+        method.request.path.filename: true
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters: 
+              method.response.header.Access-Control-Allow-Headers : "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'PUT,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  apiGatewayPUTMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: 'PUT'
+      ApiKeyRequired: True
+      ResourceId: !Ref getFilename
+      RestApiId: !Ref cfApiGateway
+      RequestParameters:
+        method.request.path.bucket: true
+        method.request.path.filename: true
+        method.request.header.Accept: false
+        method.request.header.Content-Type: false
+        method.request.header.x-amz-meta-customLabels: false
+        method.request.header.x-api-key: true
+      RequestModels:
+        image/jpeg: Photo
+        image/jpg: Photo
+        image/png: Photo
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: 'PUT'
+        Uri: arn:aws:apigateway:us-east-1:s3:path/{bucket}/{key}
+        ContentHandling: CONVERT_TO_BINARY
+        Credentials: !GetAtt cfApiS3Role.Arn
+        RequestParameters:
+          integration.request.path.bucket: method.request.path.bucket
+          integration.request.path.key: method.request.path.filename
+          integration.request.header.x-amz-meta-customLabels: method.request.header.x-amz-meta-customLabels
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+        IntegrationResponses:
+          - StatusCode: '200'
+            ResponseParameters: 
+              method.response.header.Access-Control-Allow-Headers : "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+      MethodResponses:
+        - StatusCode: '200'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+    DependsOn: cfInvokeSearchPhotosLambdaPermission
+
+  apiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - apiGatewayGetMethod
+      - cfSearchOptionsMethod
+      - cfUploadOptionsMethod1
+      - cfUploadOptionsMethod
+      - apiGatewayPUTMethod
+    Properties: 
+      # DeploymentCanarySettings: 
+      #   DeploymentCanarySettings
+      #Description: String
+      RestApiId: !Ref cfApiGateway
+      StageName: cf-photosalbum-stage
+      
+  cfUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: apiGatewayDeployment
+    Properties: 
+      ApiStages: 
+        - ApiId: !Ref cfApiGateway
+          Stage: cf-photosalbum-stage
+      UsagePlanName: cf-photosalbum-usage-plan
+
+  cfApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties: 
+      Name: cf-api-key
+      Enabled: true
+
+  cfUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn: cfUsagePlan
+    Properties: 
+      KeyId: !Ref cfApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref cfUsagePlan
+
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt 
+      - S3Frontend
+      - WebsiteURL
+    Description: URL for website hosted on S3
+  S3BucketSecureURL:
+    Value: !Join 
+      - ''
+      - - 'https://'
+        - !GetAtt 
+          - S3Frontend
+          - DomainName
+    Description: Name of S3 bucket to hold website content
