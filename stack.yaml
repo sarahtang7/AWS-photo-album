@@ -446,11 +446,11 @@ Resources:
           ResponseParameters:
             method.response.header.Access-Control-Allow-Origin: true
         - StatusCode: '403'
-          ResponseModels:
-            application/json: Error
+          # ResponseModels:
+          #   application/json: Error
         - StatusCode: '500'
-          ResponseModels:
-            application/json: Error
+          # ResponseModels:
+          #   application/json: Error
     DependsOn:
       - cfInvokeSearchPhotosLambdaPermission
 
