@@ -271,7 +271,7 @@ Resources:
         Enabled: True
         MasterUserOptions: 
           # MasterUserName: 'master'
-          # MasterUserPassword: 'SarahEmilie1!'
+          # MasterUserPassword: 'XXXXXXXXXXXXXX'
           MasterUserARN: 'arn:aws:iam::886187652459:role/cf-LambdasRole'
         InternalUserDatabaseEnabled: False
         # SAMLOptions: 
